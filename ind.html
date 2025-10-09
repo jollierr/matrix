@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="uk">
+
+<head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Матричний Калькулятор: Повний SVD з перевіркою, Обернена Матриця та ін.</title>
+      <link rel="icon" href="https://cdn-icons-png.flaticon.com/512/8801/8801287.png" type="image/x-icon" />
+      <style>
+            body {
+                  font-family: Arial, sans-serif;
+                  margin: 20px;
+                  background-color: #f4f4f9;
+            }
+
+            .container {
+                  max-width: 1100px;
+                  margin: auto;
+                  background: white;
+                  padding: 20px;
+                  border-radius: 8px;
+                  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            }
+
+            h1 {
+                  color: #333;
+                  text-align: center;
+            }
+
+            .controls-grid {
+                  display: grid;
+                  grid-template-columns: 1fr 1fr 1fr;
+                  gap: 20px;
+                  margin-bottom: 15px;
+                  align-items: end;
+            }
+
+            label {
+                  display: block;
+                  margin-bottom: 5px;
+                  font-weight: bold;
+            }
+
+            input[type="number"],
+            input[type="text"] {
+                  padding: 8px;
+                  border: 1px solid #ccc;
+                  border-radius: 4px;
+                  width: 100%;
+                  box-sizing: border-box;
+            }
+
+            button {
+                  background-color: #007bff;
+                  color: white;
+                  padding: 10px 15px;
+                  border: none;
+                  border-radius: 4px;
+                  cursor: pointer;
+                  font-size: 16px;
+                  transition: background-color 0.3s;
+                  width: 100%;
+            }
+
+            button:hover {
+                  background-color: #0056b3;
+            }
+
+            #matrixInput {
+                  display: grid;
+                  gap: 10px;
+                  margin-top: 15px;
+            }
+
+            .matrix-row {
+                  display: flex;
+                  gap: 10px;
+            }
+
+            .matrix-row input {
+                  text-align: center;
+                  flex: 1;
+            }
+
+            #results {
+                  margin-top: 20px;
+                  padding: 15px;
+                  border: 1px solid #ddd;
+                  border-radius: 4px;
+                  background-color: #e9ecef;
+                  white-space: pre-wrap;
+                  font-family: "Courier New", Courier, monospace;
+                  overflow-x: auto;
+            }
+
+            .error-message {
+                  color: red;
+                  font-weight: bold;
+            }
+      </style>
+</head>
+
+<body>
+      <div class="container">
+            <h1>Матричний Калькулятор 📊</h1>
+            <div class="controls-grid">
+                  <div>
+                        <label for="rowsSize">Кількість рядків (M):</label>
+                        <input type="number" id="rowsSize" min="1" max="10" value="3" onchange="createMatrixInputs()">
+                  </div>
+                  <div>
+                        <label for="colsSize">Кількість стовпців (N):</label>
+                        <input type="number" id="colsSize" min="1" max="10" value="3" onchange="createMatrixInputs()">
+                  </div>
+                  <div>
+                        <label for="rankK">Ранг для наближення (k):</label>
+                        <input type="number" id="rankK" min="1" value="1" onchange="updateRankKMax()">
+                  </div>
+            </div>
+            <div>
+                  <label>Введіть елементи матриці M x N:</label>
+                  <div id="matrixInput"></div>
+            </div>
+            <button onclick="calculate()" style="margin-top: 15px;">Обчислити</button>
+            <div id="results">Результати з'являться тут.</div>
+      </div>
+
+      <script>
+            const defaultMatrixValues = [[1, -4, -5], [1, 8, -1], [7, 8, 17]];
+            const EPSILON = 1e-10;
+
+            // --- UI FUNCTIONS ---
+            function updateRankKMax() { const M = parseInt(document.getElementById('rowsSize').value), N = parseInt(document.getElementById('colsSize').value), rankKInput = document.getElementById('rankK'); if (!isNaN(M) && !isNaN(N)) { rankKInput.max = Math.min(M, N); } }
+            function createMatrixInputs() { const M = parseInt(document.getElementById('rowsSize').value), N = parseInt(document.getElementById('colsSize').value), container = document.getElementById('matrixInput'); if (M < 1 || M > 10 || isNaN(M) || N < 1 || N > 10 || isNaN(N)) { container.innerHTML = `<span class="error-message">Розмір повинен бути від 1 до 10.</span>`; return; } container.innerHTML = ''; for (let i = 0; i < M; i++) { const rowDiv = document.createElement('div'); rowDiv.className = 'matrix-row'; for (let j = 0; j < N; j++) { const input = document.createElement('input'); input.type = 'text'; input.id = `m-${i}-${j}`; if (M === 3 && N === 3) input.value = defaultMatrixValues[i][j]; else if (M === N) input.value = (i === j) ? '1' : '0'; else input.value = '0'; rowDiv.appendChild(input); } container.appendChild(rowDiv); } updateRankKMax(); }
+            function calculate() { const M = parseInt(document.getElementById('rowsSize').value), N = parseInt(document.getElementById('colsSize').value); const matrix = []; for (let i = 0; i < M; i++) { const row = []; for (let j = 0; j < N; j++) { const value = parseFloat(document.getElementById(`m-${i}-${j}`).value.replace(',', '.')); if (isNaN(value)) { document.getElementById('results').innerHTML = `<span class="error-message">Некоректне значення у полі [${i + 1},${j + 1}].</span>`; return; } row.push(value); } matrix.push(row); } const result = matrixOperations(matrix); displayResults(result); }
+
+            // --- LINEAR ALGEBRA HELPERS ---
+            function transpose(m) { if (!m || !m.length || !m[0].length) return []; return m[0].map((_, c) => m.map(r => r[c])); }
+            function multiply(a, b) { return a.map(row => b[0].map((_, j) => row.reduce((sum, val, k) => sum + val * b[k][j], 0))); }
+            function multiplyMatrixVector(A, v) { return A.map(r => r.reduce((s, x, j) => s + x * v[j], 0)); }
+            function dot(v1, v2) { return v1.reduce((s, x, i) => s + x * v2[i], 0); }
+            function norm(v) { return Math.sqrt(dot(v, v)); }
+            function normalize(v) { const n = norm(v); return (n < EPSILON) ? v.map(() => 0) : v.map(x => x / n); }
+            function subtractVectors(v1, v2) { return v1.map((x, i) => x - v2[i]); }
+            function scalarMultiply(s, v) { return v.map(x => s * x); }
+            function subtractMatrices(A, B) { return A.map((row, i) => row.map((val, j) => val - B[i][j])); }
+            function getNorms(m) { let n1 = 0, ni = 0; if (!m.length) return { n1, ni }; for (let j = 0; j < m[0].length; j++) n1 = Math.max(n1, m.reduce((s, r) => s + Math.abs(r[j]), 0)); for (let i = 0; i < m.length; i++) ni = Math.max(ni, m[i].reduce((s, v) => s + Math.abs(v), 0)); return { norm1: n1, normInf: ni }; }
+            function jacobiEig(A) { const n = A.length; let D = A.map(r => [...r]); let V = Array(n).fill(0).map((_, i) => Array(n).fill(0).map((_, j) => (i === j ? 1 : 0))); if (n <= 1) return { eigenvalues: n === 1 ? [D[0][0]] : [], eigenvectors: V }; for (let iter = 0; iter < 100; iter++) { let p = 0, q = 1, maxVal = Math.abs(D[0][1]); for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) if (Math.abs(D[i][j]) > maxVal) { maxVal = Math.abs(D[i][j]); p = i; q = j; } if (maxVal < EPSILON) break; const d_pq = D[p][q], d_pp = D[p][p], d_qq = D[q][q]; const tau = (d_qq - d_pp) / (2 * d_pq); const t = Math.sign(tau) / (Math.abs(tau) + Math.sqrt(1 + tau * tau)); const c = 1 / Math.sqrt(1 + t * t); const s = t * c; const Dp_orig = [...D[p]], Dq_orig = [...D[q]]; D[p][p] = d_pp - t * d_pq; D[q][q] = d_qq + t * d_pq; D[p][q] = D[q][p] = 0; for (let k = 0; k < n; k++) { if (k !== p && k !== q) { D[k][p] = D[p][k] = c * Dp_orig[k] - s * Dq_orig[k]; D[k][q] = D[q][k] = s * Dp_orig[k] + c * Dq_orig[k]; } } for (let k = 0; k < n; k++) { const V_kp = V[k][p], V_kq = V[k][q]; V[k][p] = c * V_kp - s * V_kq; V[k][q] = s * V_kp + c * V_kq; } } return { eigenvalues: D.map((r, i) => r[i]), eigenvectors: V }; }
+            function completeOrthonormalBasis(vectors, dim) { const basis = vectors.map(v => [...v]); for (let i = 0; i < dim && basis.length < dim; i++) { let e = Array(dim).fill(0); e[i] = 1; let v = e; for (const b of basis) v = subtractVectors(v, scalarMultiply(dot(e, b), b)); if (norm(v) > EPSILON) basis.push(normalize(v)); } return basis; }
+
+            // --- MAIN CALCULATION FUNCTIONS ---
+            function calculateSVD(A) { const m = A.length, n = A[0].length; const At = transpose(A); const AtA = multiply(At, A); const { eigenvalues, eigenvectors: V_unordered } = jacobiEig(AtA); const eigPairs = eigenvalues.map((v, i) => ({ val: v, vec: V_unordered.map(r => r[i]) })).sort((a, b) => b.val - a.val); const singularValues = eigPairs.map(p => Math.sqrt(Math.max(0, p.val))); const V = transpose(eigPairs.map(p => p.vec)); let U_cols = []; for (let i = 0; i < n; i++) { if (singularValues[i] > EPSILON) { const u_col = multiplyMatrixVector(A, V.map(r => r[i])); U_cols.push(normalize(u_col)); } } if (m > U_cols.length) { U_cols = completeOrthonormalBasis(U_cols, m); } const U = transpose(U_cols); const Sigma = Array(m).fill(0).map(() => Array(n).fill(0)); singularValues.forEach((s, i) => { if (i < m && i < n) Sigma[i][i] = s; }); return { U, Sigma, V, singularValues }; }
+            function getInverseMatrix(A) { const n = A.length; if (n !== A[0].length) throw new Error("M is not square."); const aug = A.map((r, i) => [...r, ...Array(n).fill(0).map((_, j) => (i === j ? 1 : 0))]); for (let i = 0; i < n; i++) { let max = i; for (let k = i + 1; k < n; k++) if (Math.abs(aug[k][i]) > Math.abs(aug[max][i])) max = k;[aug[i], aug[max]] = [aug[max], aug[i]]; if (Math.abs(aug[i][i]) < EPSILON) throw new Error("M is singular."); const p = aug[i][i]; for (let j = i; j < 2 * n; j++) aug[i][j] /= p; for (let k = 0; k < n; k++) if (k !== i) { const f = aug[k][i]; for (let j = i; j < 2 * n; j++) aug[k][j] -= f * aug[i][j]; } } return aug.map(r => r.slice(n)); }
+            function calculateLowRank(U, Sigma, V, k) { const Uk = transpose(transpose(U).slice(0, k)); const Sk = Sigma.slice(0, k).map(r => r.slice(0, k)); const Vk = transpose(transpose(V).slice(0, k)); return multiply(multiply(Uk, Sk), transpose(Vk)); }
+            function matrixOperations(matrix) {
+                  const rows = matrix.length, cols = matrix[0].length, isSquare = rows === cols;
+                  let results = { svd: calculateSVD(matrix) };
+                  const originalNorm = norm(matrix.flat());
+                  results.norms = { ...getNorms(matrix), normFrobenius: originalNorm };
+
+                  const { U, Sigma, V } = results.svd;
+                  const A_rec = multiply(multiply(U, Sigma), transpose(V));
+                  results.svd.reconstructionError = norm(subtractMatrices(matrix, A_rec).flat());
+                  results.svd.A_reconstructed = A_rec;
+
+                  const k = parseInt(document.getElementById('rankK').value);
+                  const maxRank = Math.min(rows, cols);
+                  if (isNaN(k) || k < 1 || k > maxRank) {
+                        results.lowRank = `Невірний ранг k. Оберіть k від 1 до ${maxRank}.`;
+                  } else {
+                        const A_k = calculateLowRank(U, Sigma, V, k);
+                        const errorNorm = norm(subtractMatrices(matrix, A_k).flat());
+                        const errorPercentage = (originalNorm > EPSILON) ? (errorNorm / originalNorm) * 100 : 0;
+                        results.lowRank = { matrix: A_k, rank: k, errorPercentage: errorPercentage };
+                  }
+
+                  if (isSquare) {
+                        try {
+                              results.inverse = getInverseMatrix(matrix);
+                              const normsA_inv = getNorms(results.inverse);
+                              const sigmas = results.svd.singularValues;
+                              results.conditionNumbers = { cond1: results.norms.norm1 * normsA_inv.norm1, condInf: results.norms.normInf * normsA_inv.normInf, cond2: (sigmas[sigmas.length - 1] < EPSILON) ? "∞" : (sigmas[0] / sigmas[sigmas.length - 1]) };
+                        } catch (e) { results.inverse = "Матриця вироджена."; results.conditionNumbers = { cond1: "∞", condInf: "∞", cond2: "∞" }; }
+                  } else { results.inverse = "Матриця неквадратна."; results.conditionNumbers = "Матриця неквадратна."; }
+                  return results;
+            }
+
+            // --- DISPLAY FUNCTIONS ---
+            function formatMatrix(m, name) { return `${name}:\n` + m.map(r => `| ${r.map(v => v.toFixed(4).padStart(10, ' ')).join(' ')} |`).join('\n'); }
+            function displayResults(result) {
+                  const resultsDiv = document.getElementById('results');
+                  let output = "--- Результати Обчислень ---\n\n";
+                  const h_line = "\n" + "-".repeat(60) + "\n\n";
+
+                  output += "Повний Сингулярний розклад (A = UΣVᵀ):\n";
+                  output += formatMatrix(result.svd.U, `U (${result.svd.U.length}x${result.svd.U[0].length})`) + "\n\n";
+                  output += formatMatrix(result.svd.Sigma, `Σ (${result.svd.Sigma.length}x${result.svd.Sigma[0].length})`) + "\n\n";
+                  output += formatMatrix(transpose(result.svd.V), `Vᵀ (${result.svd.V[0].length}x${result.svd.V.length})`) + "\n";
+                  output += h_line;
+
+                  output += "Перевірка SVD (A' = UΣVᵀ):\n";
+                  output += formatMatrix(result.svd.A_reconstructed, "A' (відновлена)") + "\n\n";
+                  output += `Похибка ||A - A'||: ${result.svd.reconstructionError.toExponential(4)}\n`;
+                  output += h_line;
+
+                  output += "Низькорангове наближення (Aₖ):\n";
+                  if (typeof result.lowRank === 'string') { output += result.lowRank + "\n"; }
+                  else {
+                        output += formatMatrix(result.lowRank.matrix, `Aₖ (ранг k=${result.lowRank.rank})`) + "\n\n";
+                        output += `Відсоткова похибка наближення: ${result.lowRank.errorPercentage.toFixed(4)} %\n`;
+                  }
+                  output += h_line;
+
+                  output += "Число обумовленості (κ):\n";
+                  if (typeof result.conditionNumbers === 'string') output += result.conditionNumbers + "\n";
+                  else {
+                        output += `1. За нормою 1:      κ₁(A) = ${result.conditionNumbers.cond1.toFixed(4)}\n`;
+                        output += `2. За нормою ∞:      κ_inf(A) = ${result.conditionNumbers.condInf.toFixed(4)}\n`;
+                        output += `3. За нормою 2:      κ₂(A) = ${(typeof result.conditionNumbers.cond2 === 'string') ? '∞' : result.conditionNumbers.cond2.toFixed(4)}\n`;
+                  }
+                  output += h_line;
+
+                  output += "Обернена Матриця (A⁻¹):\n";
+                  if (typeof result.inverse === 'string') output += result.inverse + "\n";
+                  else output += formatMatrix(result.inverse, 'A⁻¹') + "\n";
+                  output += h_line;
+
+                  output += "Норми Матриці (A):\n";
+                  output += `1. Норма 1:        ||A||₁ = ${result.norms.norm1.toFixed(4)}\n`;
+                  output += `2. Норма ∞:        ||A||∞ = ${result.norms.normInf.toFixed(4)}\n`;
+                  output += `3. Норма Фробеніуса: ||A||F = ${result.norms.normFrobenius.toFixed(4)}\n`;
+
+                  resultsDiv.innerText = output;
+            }
+
+            window.onload = createMatrixInputs;
+      </script>
+</body>
+
+</html>
