@@ -207,7 +207,6 @@
             function getNorms(m) { let n1 = 0, ni = 0, nF = 0; if (!m.length) return { n1, ni, nF }; for (let j = 0; j < m[0].length; j++) n1 = Math.max(n1, m.reduce((s, r) => s + Math.abs(r[j]), 0)); for (let i = 0; i < m.length; i++) { ni = Math.max(ni, m[i].reduce((s, v) => s + Math.abs(v), 0)); nF += m[i].reduce((s, v) => s + v * v, 0); } return { norm1: n1, normInf: ni, normFrobenius: Math.sqrt(nF) }; }
             function isDiagonallyDominant(A) { for (let i = 0; i < A.length; i++) { let diag = Math.abs(A[i][i]); let sum = 0; for (let j = 0; j < A.length; j++) { if (i !== j) sum += Math.abs(A[i][j]); } if (diag <= sum) return false; } return true; }
             function jacobiEig(A) { const n = A.length; let D = A.map(r => [...r]); let V = Array(n).fill(0).map((_, i) => Array(n).fill(0).map((_, j) => (i === j ? 1 : 0))); if (n <= 1) return { eigenvalues: n === 1 ? [D[0][0]] : [], eigenvectors: V }; for (let iter = 0; iter < 100; iter++) { let p = 0, q = 1, maxVal = Math.abs(D[0][1] || 0); for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) if (Math.abs(D[i][j]) > maxVal) { maxVal = Math.abs(D[i][j]); p = i; q = j; } if (maxVal < EPSILON) break; const d_pq = D[p][q], d_pp = D[p][p], d_qq = D[q][q]; const tau = (d_qq - d_pp) / (2 * d_pq); const t = Math.sign(tau || 1) / (Math.abs(tau) + Math.sqrt(1 + tau * tau)); const c = 1 / Math.sqrt(1 + t * t); const s = t * c; const Dp_orig = [...D[p]], Dq_orig = [...D[q]]; D[p][p] = d_pp - t * d_pq; D[q][q] = d_qq + t * d_pq; D[p][q] = D[q][p] = 0; for (let k = 0; k < n; k++) { if (k !== p && k !== q) { D[k][p] = D[p][k] = c * Dp_orig[k] - s * Dq_orig[k]; D[k][q] = D[q][k] = s * Dp_orig[k] + c * Dq_orig[k]; } } for (let k = 0; k < n; k++) { const V_kp = V[k][p], V_kq = V[k][q]; V[k][p] = c * V_kp - s * V_kq; V[k][q] = s * V_kp + c * V_kq; } } return { eigenvalues: D.map((r, i) => r[i]), eigenvectors: V }; }
-            function completeOrthonormalBasis(vectors, dim) { const basis = vectors.map(v => [...v]); for (let i = 0; i < dim && basis.length < dim; i++) { let e = Array(dim).fill(0); e[i] = 1; let v = e; for (const b of basis) v = subtractVectors(v, scalarMultiply(dot(e, b), b)); if (norm(v) > EPSILON) basis.push(normalize(v)); } return basis; }
 
             // --- MAIN CALCULATION FUNCTIONS ---
             function jacobiMethod(A, b, maxIter = 100, tolerance = 1e-7) {
@@ -241,6 +240,45 @@
                   return { converged: false, message: `Метод не зійшовся за ${maxIter} ітерацій.`, isDominant: dominance, iterationHistory };
             }
 
+            function findEigenvaluesNewton(A) {
+                  if (A.length !== 3) return { error: "Метод реалізовано тільки для матриць 3x3." };
+
+                  const tr = A[0][0] + A[1][1] + A[2][2];
+                  const det = A[0][0] * (A[1][1] * A[2][2] - A[1][2] * A[2][1]) - A[0][1] * (A[1][0] * A[2][2] - A[1][2] * A[2][0]) + A[0][2] * (A[1][0] * A[2][1] - A[1][1] * A[2][0]);
+                  const m11 = A[1][1] * A[2][2] - A[1][2] * A[2][1];
+                  const m22 = A[0][0] * A[2][2] - A[0][2] * A[2][0];
+                  const m33 = A[0][0] * A[1][1] - A[0][1] * A[1][0];
+                  const sum_minors = m11 + m22 + m33;
+
+                  // p(λ) = -λ³ + tr*λ² - sum_minors*λ + det
+                  const p = (l) => -l * l * l + tr * l * l - sum_minors * l + det;
+                  const p_prime = (l) => -3 * l * l + 2 * tr * l - sum_minors;
+
+                  let lambda1 = tr / 3; // Initial guess
+                  for (let i = 0; i < 50; i++) {
+                        const p_val = p(lambda1);
+                        const p_prime_val = p_prime(lambda1);
+                        if (Math.abs(p_prime_val) < EPSILON) break;
+                        const next_lambda = lambda1 - p_val / p_prime_val;
+                        if (Math.abs(next_lambda - lambda1) < EPSILON) break;
+                        lambda1 = next_lambda;
+                  }
+
+                  // Synthetic division to get a quadratic equation
+                  const a = -1;
+                  const b = tr - lambda1;
+                  const c = -sum_minors + lambda1 * b;
+
+                  const discriminant = b * b - 4 * a * c;
+                  if (discriminant < 0) return { error: "Знайдено комплексні корені, які не підтримуються." };
+
+                  const lambda2 = (-b + Math.sqrt(discriminant)) / (2 * a);
+                  const lambda3 = (-b - Math.sqrt(discriminant)) / (2 * a);
+
+                  const poly_str = `p(λ) = -λ³ + (${tr.toFixed(3)})λ² - (${sum_minors.toFixed(3)})λ + (${det.toFixed(3)}) = 0`;
+                  return { eigenvalues: [lambda1, lambda2, lambda3].sort((x, y) => y - x), polynomial: poly_str };
+            }
+
             function powerIterationWithDeflation(A, numEigen) {
                   let currentA = A.map(row => [...row]);
                   const eigenvalues = [];
@@ -262,7 +300,7 @@
                   return { eigenvalues, eigenvectors };
             }
 
-            function calculateSVD(A) { const m = A.length, n = A[0].length; const At = transpose(A); const AtA = multiply(At, A); const { eigenvalues, eigenvectors: V_unordered } = jacobiEig(AtA); const eigPairs = eigenvalues.map((v, i) => ({ val: v, vec: V_unordered.map(r => r[i]) })).sort((a, b) => b.val - a.val); const singularValues = eigPairs.map(p => Math.sqrt(Math.max(0, p.val))); const V = transpose(eigPairs.map(p => p.vec)); let U_cols = []; for (let i = 0; i < n; i++) { if (singularValues[i] > EPSILON) { const u_col = multiplyMatrixVector(A, V.map(r => r[i])); U_cols.push(normalize(u_col)); } } if (m > U_cols.length) { U_cols = completeOrthonormalBasis(U_cols, m); } const U = transpose(U_cols); const Sigma = Array(m).fill(0).map(() => Array(n).fill(0)); singularValues.forEach((s, i) => { if (i < m && i < n) Sigma[i][i] = s; }); return { U, Sigma, V, singularValues }; }
+            function calculateSVD(A) { const m = A.length, n = A[0].length; const At = transpose(A); const AtA = multiply(At, A); const { eigenvalues, eigenvectors: V_unordered } = jacobiEig(AtA); const eigPairs = eigenvalues.map((v, i) => ({ val: v, vec: V_unordered.map(r => r[i]) })).sort((a, b) => b.val - a.val); const singularValues = eigPairs.map(p => Math.sqrt(Math.max(0, p.val))); const V = transpose(eigPairs.map(p => p.vec)); let U_cols = []; for (let i = 0; i < n; i++) { if (singularValues[i] > EPSILON) { const u_col = multiplyMatrixVector(A, V.map(r => r[i])); U_cols.push(normalize(u_col)); } } const U = transpose(U_cols); const Sigma = Array(m).fill(0).map(() => Array(n).fill(0)); singularValues.forEach((s, i) => { if (i < m && i < n) Sigma[i][i] = s; }); return { U, Sigma, V, singularValues }; }
             function getInverseMatrix(A) { const n = A.length; if (n !== A[0].length) throw new Error("M is not square."); const aug = A.map((r, i) => [...r, ...Array(n).fill(0).map((_, j) => (i === j ? 1 : 0))]); for (let i = 0; i < n; i++) { let max = i; for (let k = i + 1; k < n; k++) if (Math.abs(aug[k][i]) > Math.abs(aug[max][i])) max = k;[aug[i], aug[max]] = [aug[max], aug[i]]; if (Math.abs(aug[i][i]) < EPSILON) throw new Error("M is singular."); const p = aug[i][i]; for (let j = i; j < 2 * n; j++) aug[i][j] /= p; for (let k = 0; k < n; k++) if (k !== i) { const f = aug[k][i]; for (let j = i; j < 2 * n; j++) aug[k][j] -= f * aug[i][j]; } } return aug.map(r => r.slice(n)); }
             function calculateLowRank(U, Sigma, V, k) { const Uk = transpose(transpose(U).slice(0, k)); const Sk = Sigma.slice(0, k).map(r => r.slice(0, k)); const Vk = transpose(transpose(V).slice(0, k)); return multiply(multiply(Uk, Sk), transpose(Vk)); }
 
@@ -284,7 +322,8 @@
                   }
 
                   if (isSquare) {
-                        results.eigen = powerIterationWithDeflation(matrix, rows);
+                        results.eigenNewton = findEigenvaluesNewton(matrix);
+                        results.eigenPower = powerIterationWithDeflation(matrix, rows);
                         try {
                               results.inverse = getInverseMatrix(matrix);
                               const normsA_inv = getNorms(results.inverse);
@@ -305,7 +344,8 @@
                         results.inverse = "Матриця неквадратна.";
                         results.conditionNumbers = "Матриця неквадратна.";
                         results.jacobi = "Метод Якобі застосовний тільки для квадратних матриць.";
-                        results.eigen = "Метод застосовний тільки для квадратних матриць.";
+                        results.eigenNewton = "Метод застосовний тільки для квадратних матриць.";
+                        results.eigenPower = "Метод застосовний тільки для квадратних матриць.";
                   }
                   return results;
             }
@@ -320,7 +360,7 @@
                   const h_line = "\n" + "-".repeat(60) + "\n\n";
 
                   // 1. Jacobi Method
-                  output += "1. Розв'язок СЛАР методом Якобі (Ax = b)\n";
+                  output += "1) Розв'язати систему рівнянь методом Якобі\n";
                   if (typeof result.jacobi === 'string') { output += result.jacobi + "\n"; }
                   else if (result.jacobi) {
                         if (result.jacobi.converged) {
@@ -347,43 +387,51 @@
                   }
                   output += h_line;
 
-                  // 2. Eigenvalues and Eigenvectors
-                  output += "2. Власні числа та вектори (Степеневий метод + дефляція)\n\n";
-                  if (typeof result.eigen === 'string') { output += result.eigen + "\n"; }
-                  else if (result.eigen) {
-                        for (let i = 0; i < result.eigen.eigenvalues.length; i++) {
-                              output += `Власне число λ_${i + 1}: ${result.eigen.eigenvalues[i].toFixed(7)}\n`;
-                              output += formatVector(result.eigen.eigenvectors[i], `Власний вектор v_${i + 1}`) + "\n\n";
+                  // 2. Eigenvalues via Newton-Raphson
+                  output += "2) Знайти власні числа матриці за допомогою характеристичного рівняння. Рівняння розв’язати методом Ньютона-Рафсона\n\n";
+                  if (typeof result.eigenNewton === 'string') { output += result.eigenNewton + "\n"; }
+                  else if (result.eigenNewton.error) { output += result.eigenNewton.error + "\n"; }
+                  else if (result.eigenNewton) {
+                        output += "Характеристичне рівняння:\n" + result.eigenNewton.polynomial + "\n\n";
+                        output += "Знайдені власні числа (корені рівняння):\n";
+                        result.eigenNewton.eigenvalues.forEach((val, i) => {
+                              output += `λ_${i + 1} = ${val.toFixed(7)}\n`;
+                        });
+                  }
+                  output += h_line;
+
+                  // 3. Eigenvectors via Power Iteration
+                  output += "3) Знайти власні вектори матриці методом степеневих ітерацій з дефляцією (Power iteration and deflation)\n\n";
+                  if (typeof result.eigenPower === 'string') { output += result.eigenPower + "\n"; }
+                  else if (result.eigenPower) {
+                        for (let i = 0; i < result.eigenPower.eigenvalues.length; i++) {
+                              output += `Власне число λ_${i + 1}: ${result.eigenPower.eigenvalues[i].toFixed(7)}\n`;
+                              output += formatVector(result.eigenPower.eigenvectors[i], `Відповідний власний вектор v_${i + 1}`) + "\n\n";
                         }
                   }
                   output += h_line;
 
-                  // 3. Low-Rank Approximation
-                  output += `3. Низькорангове наближення (A_k) рангу k=${result.lowRank.rank}\n\n`;
+                  // 4. Low-Rank Approximation
+                  output += `4) Знайти lowRank апроксимацію матриці за першими двома сингулярними значеннями (k=${result.lowRank.rank})\n\n`;
                   if (typeof result.lowRank === 'string') { output += result.lowRank + "\n"; }
                   else {
                         output += formatMatrix(result.lowRank.matrix, `A_k (ранг k=${result.lowRank.rank})`) + "\n";
                   }
                   output += h_line;
 
-                  // 4. Condition Numbers
-                  output += "4. Число обумовленості (κ)\n\n";
+                  // 5. Condition Numbers
+                  output += "5) Знайти число обумовленості системи за чотирма нормами: Норма-1, норма-нескінченність, спектральна норма і норма Фробеніуса\n\n";
                   if (typeof result.conditionNumbers === 'string') output += result.conditionNumbers + "\n";
                   else {
-                        output += `1. За нормою 1 (стовпцева): κ₁(A) = ${result.conditionNumbers.cond1.toFixed(4)}\n`;
-                        output += `2. За нормою ∞ (рядкова):   κ_inf(A) = ${result.conditionNumbers.condInf.toFixed(4)}\n`;
-                        output += `3. Спектральна (норма 2):    κ₂(A) = ${result.conditionNumbers.cond2.toFixed(4)}\n`;
-                        output += `4. За нормою Фробеніуса:     κ_F(A) = ${result.conditionNumbers.condFrobenius.toFixed(4)}\n`;
+                        output += `1. Норма-1 (стовпцева):      κ₁(A) = ${result.conditionNumbers.cond1.toFixed(4)}\n`;
+                        output += `2. Норма-нескінченність (∞): κ_inf(A) = ${result.conditionNumbers.condInf.toFixed(4)}\n`;
+                        output += `3. Спектральна норма (2):     κ₂(A) = ${result.conditionNumbers.cond2.toFixed(4)}\n`;
+                        output += `4. Норма Фробеніуса:         κ_F(A) = ${result.conditionNumbers.condFrobenius.toFixed(4)}\n`;
                   }
                   output += h_line;
 
-                  // 5. Additional Info (Norms, Inverse)
-                  output += "5. Додаткова інформація\n\n";
-                  output += "Норми Матриці (A):\n";
-                  output += `1. Норма 1:          ||A||₁   = ${result.norms.norm1.toFixed(4)}\n`;
-                  output += `2. Норма ∞:          ||A||∞   = ${result.norms.normInf.toFixed(4)}\n`;
-                  output += `3. Норма Фробеніуса: ||A||F   = ${result.norms.normFrobenius.toFixed(4)}\n\n`;
-
+                  // Additional Info
+                  output += "Додаткові властивості матриці\n\n";
                   output += "Обернена Матриця (A⁻¹):\n";
                   if (typeof result.inverse === 'string') output += result.inverse + "\n";
                   else output += formatMatrix(result.inverse, 'A⁻¹') + "\n";
