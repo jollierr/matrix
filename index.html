@@ -4,7 +4,7 @@
 <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Матричний Калькулятор: Повний Розв'язок</title>
+      <title>Матричний Калькулятор: Повний Розв'язок з Формулами</title>
       <link rel="icon" href="https://cdn-icons-png.flaticon.com/512/8801/8801287.png" type="image/x-icon" />
       <style>
             body {
@@ -130,9 +130,9 @@
       </div>
 
       <script>
-            // --- ВХІДНІ ДАНІ З ЗАВДАННЯ (З ПЕРЕСТАНОВКОЮ ДЛЯ ЗБІЖНОСТІ) ---
-            const defaultMatrixValues = [[11, 0.5, -3], [1, 18, -3], [2, 0, 18]];
-            const defaultVectorBValues = [-5, -10, -3];
+            // --- ВХІДНІ ДАНІ ЗА ЗАМОВЧУВАННЯМ ---
+            const defaultMatrixValues = [[2, 0, 18], [11, 0.5, -3], [1, 18, -3]];
+            const defaultVectorBValues = [-3, -5, -10];
             const EPSILON = 1e-10;
 
             // --- UI FUNCTIONS ---
@@ -168,11 +168,12 @@
                   } else { vectorBContainer.style.display = 'none'; vectorBInput.innerHTML = ''; }
                   updateRankKMax();
             }
+
             function calculate() {
                   const M = parseInt(document.getElementById('rowsSize').value), N = parseInt(document.getElementById('colsSize').value);
-                  const matrix = [];
+                  let matrix = [];
                   for (let i = 0; i < M; i++) {
-                        const row = [];
+                        let row = [];
                         for (let j = 0; j < N; j++) {
                               const value = parseFloat(document.getElementById(`m-${i}-${j}`).value.replace(',', '.'));
                               if (isNaN(value)) { document.getElementById('results').innerHTML = `<span class="error-message">Некоректне значення у полі [${i + 1},${j + 1}].</span>`; return; }
@@ -189,8 +190,33 @@
                               vectorB.push(value);
                         }
                   }
-                  const result = matrixOperations(matrix, vectorB);
-                  displayResults(result);
+
+                  // Зберігаємо оригінальну матрицю для виводу
+                  const originalMatrix = JSON.parse(JSON.stringify(matrix));
+
+                  let rearrangementInfo = { wasRearranged: false };
+                  let matrixForCalc = JSON.parse(JSON.stringify(matrix));
+                  let vectorBForCalc = vectorB ? [...vectorB] : null;
+
+                  if (M === N && !isDiagonallyDominant(matrixForCalc)) {
+                        const permuteResult = tryPermuteForDominance(matrixForCalc, vectorBForCalc);
+                        if (permuteResult.success) {
+                              matrixForCalc = permuteResult.A;
+                              vectorBForCalc = permuteResult.b;
+                              rearrangementInfo = {
+                                    wasRearranged: true,
+                                    message: "ПОПЕРЕДЖЕННЯ: Початкова матриця не є діагонально домінантною. Систему було автоматично перевпорядковано для забезпечення збіжності методу Якобі.",
+                              };
+                        } else {
+                              rearrangementInfo = {
+                                    wasRearranged: false,
+                                    message: "ПОПЕРЕДЖЕННЯ: Матриця не є діагонально домінантною, і не вдалося досягти цього шляхом перестановки рядків. Збіжність не гарантована."
+                              };
+                        }
+                  }
+
+                  const result = matrixOperations(matrixForCalc, vectorBForCalc);
+                  displayResults(result, matrixForCalc, originalMatrix, rearrangementInfo);
             }
 
             // --- LINEAR ALGEBRA HELPERS ---
@@ -206,9 +232,50 @@
             function subtractMatrices(A, B) { return A.map((row, i) => row.map((val, j) => val - B[i][j])); }
             function getNorms(m) { let n1 = 0, ni = 0, nF = 0; if (!m.length) return { n1, ni, nF }; for (let j = 0; j < m[0].length; j++) n1 = Math.max(n1, m.reduce((s, r) => s + Math.abs(r[j]), 0)); for (let i = 0; i < m.length; i++) { ni = Math.max(ni, m[i].reduce((s, v) => s + Math.abs(v), 0)); nF += m[i].reduce((s, v) => s + v * v, 0); } return { norm1: n1, normInf: ni, normFrobenius: Math.sqrt(nF) }; }
             function isDiagonallyDominant(A) { for (let i = 0; i < A.length; i++) { let diag = Math.abs(A[i][i]); let sum = 0; for (let j = 0; j < A.length; j++) { if (i !== j) sum += Math.abs(A[i][j]); } if (diag <= sum) return false; } return true; }
-            function jacobiEig(A) { const n = A.length; let D = A.map(r => [...r]); let V = Array(n).fill(0).map((_, i) => Array(n).fill(0).map((_, j) => (i === j ? 1 : 0))); if (n <= 1) return { eigenvalues: n === 1 ? [D[0][0]] : [], eigenvectors: V }; for (let iter = 0; iter < 100; iter++) { let p = 0, q = 1, maxVal = Math.abs(D[0][1] || 0); for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) if (Math.abs(D[i][j]) > maxVal) { maxVal = Math.abs(D[i][j]); p = i; q = j; } if (maxVal < EPSILON) break; const d_pq = D[p][q], d_pp = D[p][p], d_qq = D[q][q]; const tau = (d_qq - d_pp) / (2 * d_pq); const t = Math.sign(tau || 1) / (Math.abs(tau) + Math.sqrt(1 + tau * tau)); const c = 1 / Math.sqrt(1 + t * t); const s = t * c; const Dp_orig = [...D[p]], Dq_orig = [...D[q]]; D[p][p] = d_pp - t * d_pq; D[q][q] = d_qq + t * d_pq; D[p][q] = D[q][p] = 0; for (let k = 0; k < n; k++) { if (k !== p && k !== q) { D[k][p] = D[p][k] = c * Dp_orig[k] - s * Dq_orig[k]; D[k][q] = D[q][k] = s * Dp_orig[k] + c * Dq_orig[k]; } } for (let k = 0; k < n; k++) { const V_kp = V[k][p], V_kq = V[k][q]; V[k][p] = c * V_kp - s * V_kq; V[k][q] = s * V_kp + c * V_kq; } } return { eigenvalues: D.map((r, i) => r[i]), eigenvectors: V }; }
 
             // --- MAIN CALCULATION FUNCTIONS ---
+            function tryPermuteForDominance(A, b) {
+                  const n = A.length;
+                  const permutation = new Array(n);
+                  const used_rows = new Array(n).fill(false);
+
+                  function findPermutation(k) {
+                        if (k === n) { return true; }
+
+                        for (let i = 0; i < n; i++) {
+                              if (!used_rows[i]) {
+                                    let off_diag_sum = 0;
+                                    for (let j = 0; j < n; j++) {
+                                          if (j !== k) {
+                                                off_diag_sum += Math.abs(A[i][j]);
+                                          }
+                                    }
+                                    if (Math.abs(A[i][k]) > off_diag_sum) {
+                                          permutation[k] = i;
+                                          used_rows[i] = true;
+                                          if (findPermutation(k + 1)) {
+                                                return true;
+                                          }
+                                          used_rows[i] = false; // Backtrack
+                                    }
+                              }
+                        }
+                        return false;
+                  }
+
+                  if (findPermutation(0)) {
+                        const permutedA = new Array(n).fill(0).map(() => new Array(n));
+                        const permutedB = new Array(n);
+                        for (let i = 0; i < n; i++) {
+                              permutedA[i] = [...A[permutation[i]]];
+                              if (b) permutedB[i] = b[permutation[i]];
+                        }
+                        return { success: true, A: permutedA, b: permutedB, permutation };
+                  }
+
+                  return { success: false, A, b };
+            }
+
             function jacobiMethod(A, b, maxIter = 100, tolerance = 1e-7) {
                   const n = A.length;
                   for (let i = 0; i < n; i++) { if (Math.abs(A[i][i]) < EPSILON) return { converged: false, message: `Нульовий діагональний елемент A[${i + 1},${i + 1}].` }; }
@@ -250,11 +317,10 @@
                   const m33 = A[0][0] * A[1][1] - A[0][1] * A[1][0];
                   const sum_minors = m11 + m22 + m33;
 
-                  // p(λ) = -λ³ + tr*λ² - sum_minors*λ + det
                   const p = (l) => -l * l * l + tr * l * l - sum_minors * l + det;
                   const p_prime = (l) => -3 * l * l + 2 * tr * l - sum_minors;
 
-                  let lambda1 = tr / 3; // Initial guess
+                  let lambda1 = tr / 3;
                   for (let i = 0; i < 50; i++) {
                         const p_val = p(lambda1);
                         const p_prime_val = p_prime(lambda1);
@@ -264,11 +330,7 @@
                         lambda1 = next_lambda;
                   }
 
-                  // Synthetic division to get a quadratic equation
-                  const a = -1;
-                  const b = tr - lambda1;
-                  const c = -sum_minors + lambda1 * b;
-
+                  const a = -1, b = tr - lambda1, c = -sum_minors + lambda1 * b;
                   const discriminant = b * b - 4 * a * c;
                   if (discriminant < 0) return { error: "Знайдено комплексні корені, які не підтримуються." };
 
@@ -281,25 +343,22 @@
 
             function powerIterationWithDeflation(A, numEigen) {
                   let currentA = A.map(row => [...row]);
-                  const eigenvalues = [];
-                  const eigenvectors = [];
+                  const eigenvalues = [], eigenvectors = [];
                   for (let i = 0; i < numEigen; i++) {
                         let b_k = Array(A.length).fill(1);
                         let eigenvalue;
                         for (let iter = 0; iter < 100; iter++) {
-                              const Ab_k = multiplyMatrixVector(currentA, b_k);
-                              b_k = normalize(Ab_k);
+                              b_k = normalize(multiplyMatrixVector(currentA, b_k));
                         }
-                        const Ab_k = multiplyMatrixVector(currentA, b_k);
-                        eigenvalue = dot(b_k, Ab_k);
+                        eigenvalue = dot(b_k, multiplyMatrixVector(currentA, b_k));
                         eigenvalues.push(eigenvalue);
                         eigenvectors.push(b_k);
-                        const deflationMatrix = outerProduct(b_k, b_k);
-                        currentA = subtractMatrices(currentA, deflationMatrix.map(row => row.map(val => val * eigenvalue)));
+                        currentA = subtractMatrices(currentA, scalarMultiply(eigenvalue, outerProduct(b_k, b_k)));
                   }
                   return { eigenvalues, eigenvectors };
             }
 
+            function jacobiEig(A) { const n = A.length; let D = A.map(r => [...r]); let V = Array(n).fill(0).map((_, i) => Array(n).fill(0).map((_, j) => (i === j ? 1 : 0))); if (n <= 1) return { eigenvalues: n === 1 ? [D[0][0]] : [], eigenvectors: V }; for (let iter = 0; iter < 100; iter++) { let p = 0, q = 1, maxVal = Math.abs(D[0][1] || 0); for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) if (Math.abs(D[i][j]) > maxVal) { maxVal = Math.abs(D[i][j]); p = i; q = j; } if (maxVal < EPSILON) break; const d_pq = D[p][q], d_pp = D[p][p], d_qq = D[q][q]; const tau = (d_qq - d_pp) / (2 * d_pq); const t = Math.sign(tau || 1) / (Math.abs(tau) + Math.sqrt(1 + tau * tau)); const c = 1 / Math.sqrt(1 + t * t); const s = t * c; const Dp_orig = [...D[p]], Dq_orig = [...D[q]]; D[p][p] = d_pp - t * d_pq; D[q][q] = d_qq + t * d_pq; D[p][q] = D[q][p] = 0; for (let k = 0; k < n; k++) { if (k !== p && k !== q) { D[k][p] = D[p][k] = c * Dp_orig[k] - s * Dq_orig[k]; D[k][q] = D[q][k] = s * Dp_orig[k] + c * Dq_orig[k]; } } for (let k = 0; k < n; k++) { const V_kp = V[k][p], V_kq = V[k][q]; V[k][p] = c * V_kp - s * V_kq; V[k][q] = s * V_kp + c * V_kq; } } return { eigenvalues: D.map((r, i) => r[i]), eigenvectors: V }; }
             function calculateSVD(A) { const m = A.length, n = A[0].length; const At = transpose(A); const AtA = multiply(At, A); const { eigenvalues, eigenvectors: V_unordered } = jacobiEig(AtA); const eigPairs = eigenvalues.map((v, i) => ({ val: v, vec: V_unordered.map(r => r[i]) })).sort((a, b) => b.val - a.val); const singularValues = eigPairs.map(p => Math.sqrt(Math.max(0, p.val))); const V = transpose(eigPairs.map(p => p.vec)); let U_cols = []; for (let i = 0; i < n; i++) { if (singularValues[i] > EPSILON) { const u_col = multiplyMatrixVector(A, V.map(r => r[i])); U_cols.push(normalize(u_col)); } } const U = transpose(U_cols); const Sigma = Array(m).fill(0).map(() => Array(n).fill(0)); singularValues.forEach((s, i) => { if (i < m && i < n) Sigma[i][i] = s; }); return { U, Sigma, V, singularValues }; }
             function getInverseMatrix(A) { const n = A.length; if (n !== A[0].length) throw new Error("M is not square."); const aug = A.map((r, i) => [...r, ...Array(n).fill(0).map((_, j) => (i === j ? 1 : 0))]); for (let i = 0; i < n; i++) { let max = i; for (let k = i + 1; k < n; k++) if (Math.abs(aug[k][i]) > Math.abs(aug[max][i])) max = k;[aug[i], aug[max]] = [aug[max], aug[i]]; if (Math.abs(aug[i][i]) < EPSILON) throw new Error("M is singular."); const p = aug[i][i]; for (let j = i; j < 2 * n; j++) aug[i][j] /= p; for (let k = 0; k < n; k++) if (k !== i) { const f = aug[k][i]; for (let j = i; j < 2 * n; j++) aug[k][j] -= f * aug[i][j]; } } return aug.map(r => r.slice(n)); }
             function calculateLowRank(U, Sigma, V, k) { const Uk = transpose(transpose(U).slice(0, k)); const Sk = Sigma.slice(0, k).map(r => r.slice(0, k)); const Vk = transpose(transpose(V).slice(0, k)); return multiply(multiply(Uk, Sk), transpose(Vk)); }
@@ -317,8 +376,7 @@
                   if (isNaN(k) || k < 1 || k > maxRank) {
                         results.lowRank = `Невірний ранг k. Оберіть k від 1 до ${maxRank}.`;
                   } else {
-                        const A_k = calculateLowRank(U, Sigma, V, k);
-                        results.lowRank = { matrix: A_k, rank: k };
+                        results.lowRank = { matrix: calculateLowRank(U, Sigma, V, k), rank: k };
                   }
 
                   if (isSquare) {
@@ -354,22 +412,51 @@
             function formatMatrix(m, name, precision = 7) { if (!m || !m[0]) return ""; return `${name}:\n` + m.map(r => `| ${r.map(v => v.toFixed(precision).padStart(12, ' ')).join(' ')} |`).join('\n'); }
             function formatVector(v, name, precision = 7) { return `${name}:\n` + v.map(val => `| ${val.toFixed(precision).padStart(12, ' ')} |`).join('\n'); }
 
-            function displayResults(result) {
+            function displayResults(result, matrixForCalc, originalMatrix, rearrangementInfo) {
                   const resultsDiv = document.getElementById('results');
                   let output = "--- Результати Обчислень ---\n";
                   const h_line = "\n" + "-".repeat(60) + "\n\n";
 
                   // 1. Jacobi Method
-                  output += "1) Розв'язати систему рівнянь методом Якобі\n";
+                  output += "1) Розв'язати систему рівнянь методом Якобі\n\n";
+
+                  if (rearrangementInfo.message) {
+                        output += rearrangementInfo.message + "\n\n";
+                        output += formatMatrix(originalMatrix, 'Початкова матриця (A)') + '\n\n';
+                        output += formatMatrix(matrixForCalc, 'Матриця для обчислень (A\')') + '\n\n';
+                  }
+
+                  output += `Перевірка Умови Збіжності (Діагональна домінантність):\nФормально: |a_ii| > Σ_{j≠i} |a_ij| для всіх i.\n\nПеревірка для матриці, що використовується в обчисленнях (A'):\n`;
+                  if (matrixForCalc && matrixForCalc.length > 0) {
+                        matrixForCalc.forEach((row, i) => {
+                              const diag = Math.abs(row[i]);
+                              let sum = 0;
+                              let sumStr = [];
+                              row.forEach((val, j) => {
+                                    if (i !== j) {
+                                          sum += Math.abs(val);
+                                          sumStr.push(`|${val}|`);
+                                    }
+                              });
+                              output += `Рядок ${i + 1}: |${row[i]}| > ${sumStr.join(' + ')}  =>  ${diag.toFixed(1)} > ${sum.toFixed(1)} -> ${diag > sum ? 'OK' : 'FAIL'}\n`;
+                        });
+                  }
+
                   if (typeof result.jacobi === 'string') { output += result.jacobi + "\n"; }
                   else if (result.jacobi) {
+                        output += `\nВисновок: Матриця ${result.jacobi.isDominant ? 'є діагонально домінантною. Збіжність гарантована.' : 'НЕ є діагонально домінантною. Збіжність не гарантована.'}\n`;
+                        const jacobiFormula = `
+Формула для ітераційного процесу:
+              1   ⎛      n              ⎞
+x_i^(k+1) = ---- ⎜ b_i -  Σ  a_ij * x_j^(k) ⎟
+            a_ii ⎝     j=1, j≠i         ⎠
+`;
+                        output += jacobiFormula;
                         if (result.jacobi.converged) {
-                              output += `\nМатриця ${result.jacobi.isDominant ? 'є' : 'НЕ є'} діагонально домінантною (умова збіжності виконується).\n`;
-                              output += `Метод зійшовся за ${result.jacobi.iterations} ітерацій з точністю 1e-7.\n\n`;
+                              output += `\nМетод зійшовся за ${result.jacobi.iterations} ітерацій з точністю 1e-7.\n\n`;
                               output += formatVector(result.jacobi.solution, "x (фінальний розв'язок)") + "\n";
                         } else {
-                              output += `\nПопередження: ${result.jacobi.isDominant ? 'Матриця є діагонально домінантною, але метод не зійшовся.' : 'Матриця не є діагонально домінантною (збіжність не гарантована).'}\n`;
-                              output += result.jacobi.message + "\n";
+                              output += "\n" + result.jacobi.message + "\n";
                         }
                         if (result.jacobi.iterationHistory) {
                               output += "\n--- Детальні Ітерації Методу Якобі ---\n";
@@ -378,9 +465,7 @@
                                     output += formatVector(hist.vector, `x^(${k})`);
                                     if (k > 0) {
                                           output += "\nРозрахунки:\n";
-                                          hist.calcs.forEach((calc, i) => {
-                                                output += ` x_${i + 1}^(${k}) = ${calc}\n`;
-                                          });
+                                          hist.calcs.forEach((calc, i) => { output += ` x_${i + 1}^(${k}) = ${calc}\n`; });
                                     }
                               });
                         }
@@ -389,19 +474,29 @@
 
                   // 2. Eigenvalues via Newton-Raphson
                   output += "2) Знайти власні числа матриці за допомогою характеристичного рівняння. Рівняння розв’язати методом Ньютона-Рафсона\n\n";
+                  const newtonFormulas = `Формули:
+1. Характеристичне рівняння: det(A - λI) = 0
+   Для матриці 3x3: -λ³ + tr(A)λ² - (M₁₁+M₂₂+M₃₃)λ + det(A) = 0
+   де tr(A) - слід матриці, M_ii - головні мінори.
+2. Метод Ньютона: λ_(k+1) = λ_k - p(λ_k) / p'(λ_k)\n\n`;
+                  output += newtonFormulas;
                   if (typeof result.eigenNewton === 'string') { output += result.eigenNewton + "\n"; }
                   else if (result.eigenNewton.error) { output += result.eigenNewton.error + "\n"; }
                   else if (result.eigenNewton) {
-                        output += "Характеристичне рівняння:\n" + result.eigenNewton.polynomial + "\n\n";
+                        output += "Визначене характеристичне рівняння:\n" + result.eigenNewton.polynomial + "\n\n";
                         output += "Знайдені власні числа (корені рівняння):\n";
-                        result.eigenNewton.eigenvalues.forEach((val, i) => {
-                              output += `λ_${i + 1} = ${val.toFixed(7)}\n`;
-                        });
+                        result.eigenNewton.eigenvalues.forEach((val, i) => { output += `λ_${i + 1} = ${val.toFixed(7)}\n`; });
                   }
                   output += h_line;
 
                   // 3. Eigenvectors via Power Iteration
-                  output += "3) Знайти власні вектори матриці методом степеневих ітерацій з дефляцією (Power iteration and deflation)\n\n";
+                  output += "3) Знайти власні вектори матриці методом степеневих ітерацій з дефляцією\n\n";
+                  const powerFormulas = `Формули:
+1. Степенева ітерація (знаходження домінантного власного вектора v):
+   v^(k+1) = A * v^(k) / ||A * v^(k)||
+2. Власне число (частка Релея): λ = (vᵀ * A * v) / (vᵀ * v)
+3. Дефляція Готелінга: A_new = A_old - λ * v * vᵀ\n\n`;
+                  output += powerFormulas;
                   if (typeof result.eigenPower === 'string') { output += result.eigenPower + "\n"; }
                   else if (result.eigenPower) {
                         for (let i = 0; i < result.eigenPower.eigenvalues.length; i++) {
@@ -413,15 +508,25 @@
 
                   // 4. Low-Rank Approximation
                   output += `4) Знайти lowRank апроксимацію матриці за першими двома сингулярними значеннями (k=${result.lowRank.rank})\n\n`;
+                  const svdFormulas = `Формули:
+1. Сингулярний розклад (SVD): A = U * Σ * Vᵀ
+2. Низькорангова апроксимація: A_k = U_k * Σ_k * V_kᵀ
+   де U_k, Σ_k, V_k - матриці з перших k стовпців/рядків.\n\n`;
+                  output += svdFormulas;
                   if (typeof result.lowRank === 'string') { output += result.lowRank + "\n"; }
-                  else {
-                        output += formatMatrix(result.lowRank.matrix, `A_k (ранг k=${result.lowRank.rank})`) + "\n";
-                  }
+                  else { output += formatMatrix(result.lowRank.matrix, `A_k (ранг k=${result.lowRank.rank})`) + "\n"; }
                   output += h_line;
 
                   // 5. Condition Numbers
-                  output += "5) Знайти число обумовленості системи за чотирма нормами: Норма-1, норма-нескінченність, спектральна норма і норма Фробеніуса\n\n";
-                  if (typeof result.conditionNumbers === 'string') output += result.conditionNumbers + "\n";
+                  output += "5) Знайти число обумовленості системи за чотирма нормами\n\n";
+                  const condFormulas = `Формули:
+1. Загальне визначення: κ(A) = ||A|| * ||A⁻¹||
+2. Норма-1: ||A||₁ = max_j Σ_i |a_ij| (макс. сума модулів стовпців)
+3. Норма-∞: ||A||_∞ = max_i Σ_j |a_ij| (макс. сума модулів рядків)
+4. Спектральна норма: ||A||₂ = σ_max (макс. сингулярне число) => κ₂(A) = σ_max / σ_min
+5. Норма Фробеніуса: ||A||_F = sqrt( Σ_i Σ_j |a_ij|² )\n\n`;
+                  output += condFormulas;
+                  if (typeof result.conditionNumbers === 'string') { output += result.conditionNumbers + "\n"; }
                   else {
                         output += `1. Норма-1 (стовпцева):      κ₁(A) = ${result.conditionNumbers.cond1.toFixed(4)}\n`;
                         output += `2. Норма-нескінченність (∞): κ_inf(A) = ${result.conditionNumbers.condInf.toFixed(4)}\n`;
@@ -432,7 +537,7 @@
 
                   // Additional Info
                   output += "Додаткові властивості матриці\n\n";
-                  output += "Обернена Матриця (A⁻¹):\n";
+                  output += "Обернена Матриця (A⁻¹):\nОбчислюється методом Гауса-Жордана [A|I] -> [I|A⁻¹]\n";
                   if (typeof result.inverse === 'string') output += result.inverse + "\n";
                   else output += formatMatrix(result.inverse, 'A⁻¹') + "\n";
 
