@@ -542,9 +542,9 @@
                   else if (result.jacobi) {
                         jacobiSection += `<div class="conclusion">${result.jacobi.isDominant ? 'Матриця є діагонально домінантною. Збіжність гарантована.' : 'Матриця НЕ є діагонально домінантною. Збіжність не гарантована.'}</div>`;
                         jacobiSection += `<div class="formula-block"><strong>Формула для ітераційного процесу:</strong>
-              1   ⎛      n              ⎞
+              1  ⎛      n                   ⎞
 x_i^(k+1) = ---- ⎜ b_i -  Σ  a_ij * x_j^(k) ⎟
-            a_ii ⎝     j=1, j≠i         ⎠</div>`;
+            a_ii ⎝     j=1, j≠i             ⎠</div>`;
 
                         if (result.jacobi.converged) {
                               jacobiSection += `<p>Метод зійшовся за <strong>${result.jacobi.iterations} ітерацій</strong> з точністю 1e-7.</p>`;
