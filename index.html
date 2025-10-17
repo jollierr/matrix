@@ -542,13 +542,28 @@
                   else if (result.jacobi) {
                         jacobiSection += `<div class="conclusion">${result.jacobi.isDominant ? 'Матриця є діагонально домінантною. Збіжність гарантована.' : 'Матриця НЕ є діагонально домінантною. Збіжність не гарантована.'}</div>`;
                         jacobiSection += `<div class="formula-block"><strong>Формула для ітераційного процесу:</strong>
-              1  ⎛      n                   ⎞
+              1   ⎛      n              ⎞
 x_i^(k+1) = ---- ⎜ b_i -  Σ  a_ij * x_j^(k) ⎟
-            a_ii ⎝     j=1, j≠i             ⎠</div>`;
+            a_ii ⎝     j=1, j≠i         ⎠</div>`;
 
                         if (result.jacobi.converged) {
                               jacobiSection += `<p>Метод зійшовся за <strong>${result.jacobi.iterations} ітерацій</strong> з точністю 1e-7.</p>`;
                               jacobiSection += formatVector(result.jacobi.solution, "Фінальний розв'язок (x)");
+
+                              if (result.jacobi.iterationHistory) {
+                                    jacobiSection += `<h4>Детальні Ітерації Методу Якобі</h4>`;
+                                    result.jacobi.iterationHistory.forEach((hist, k) => {
+                                          jacobiSection += `<hr style="border:0; border-top: 1px solid #ccc; margin: 20px 0;"><p><strong>Ітерація ${k}:</strong></p>`;
+                                          jacobiSection += formatVector(hist.vector, `x^(${k})`);
+                                          if (k > 0) {
+                                                jacobiSection += `<div class="formula-block"><strong>Розрахунки для ітерації ${k}:</strong>\n`;
+                                                hist.calcs.forEach((calc, i) => {
+                                                      jacobiSection += ` x_${i + 1}^(${k}) = ${calc}\n`;
+                                                });
+                                                jacobiSection += `</div>`;
+                                          }
+                                    });
+                              }
                         } else {
                               jacobiSection += `<div class="warning">${result.jacobi.message}</div>`;
                         }
