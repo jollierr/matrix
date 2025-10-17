@@ -4,7 +4,7 @@
 <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Матричний Калькулятор: Метод Якобі, SVD, Обернена Матриця та ін.</title>
+      <title>Матричний Калькулятор: Метод Якобі з Ітераціями, SVD та ін.</title>
       <link rel="icon" href="https://cdn-icons-png.flaticon.com/512/8801/8801287.png" type="image/x-icon" />
       <style>
             body {
@@ -130,8 +130,8 @@
       </div>
 
       <script>
-            const defaultMatrixValues = [[10, -1, 2], [1, 11, -1], [2, -1, 10]];
-            const defaultVectorBValues = [6, 25, -11];
+            const defaultMatrixValues = [[11, 0.5, -3], [1, 18, -3], [2, 0, 18]];
+            const defaultVectorBValues = [-5, -10, -3];
             const EPSILON = 1e-10;
 
             // --- UI FUNCTIONS ---
@@ -147,7 +147,7 @@
                         for (let j = 0; j < N; j++) {
                               const input = document.createElement('input');
                               input.type = 'text'; input.id = `m-${i}-${j}`;
-                              if (M === 3 && N === 3) input.value = defaultMatrixValues[i][j];
+                              if (M === 3 && N === 3 && defaultMatrixValues[i]?.[j] !== undefined) input.value = defaultMatrixValues[i][j];
                               else if (M === N) input.value = (i === j) ? '1' : '0';
                               else input.value = '0';
                               rowDiv.appendChild(input);
@@ -160,7 +160,7 @@
                         for (let i = 0; i < M; i++) {
                               const input = document.createElement('input');
                               input.type = 'text'; input.id = `v-${i}`;
-                              input.value = (M === 3) ? defaultVectorBValues[i] : i + 1;
+                              input.value = (M === 3 && defaultVectorBValues[i] !== undefined) ? defaultVectorBValues[i] : i + 1;
                               rowDiv.appendChild(input);
                         }
                         vectorBInput.appendChild(rowDiv);
@@ -204,15 +204,17 @@
             function subtractMatrices(A, B) { return A.map((row, i) => row.map((val, j) => val - B[i][j])); }
             function getNorms(m) { let n1 = 0, ni = 0; if (!m.length) return { n1, ni }; for (let j = 0; j < m[0].length; j++) n1 = Math.max(n1, m.reduce((s, r) => s + Math.abs(r[j]), 0)); for (let i = 0; i < m.length; i++) ni = Math.max(ni, m[i].reduce((s, v) => s + Math.abs(v), 0)); return { norm1: n1, normInf: ni }; }
             function isDiagonallyDominant(A) { for (let i = 0; i < A.length; i++) { let diag = Math.abs(A[i][i]); let sum = 0; for (let j = 0; j < A.length; j++) { if (i !== j) sum += Math.abs(A[i][j]); } if (diag <= sum) return false; } return true; }
-            function jacobiEig(A) { const n = A.length; let D = A.map(r => [...r]); let V = Array(n).fill(0).map((_, i) => Array(n).fill(0).map((_, j) => (i === j ? 1 : 0))); if (n <= 1) return { eigenvalues: n === 1 ? [D[0][0]] : [], eigenvectors: V }; for (let iter = 0; iter < 100; iter++) { let p = 0, q = 1, maxVal = Math.abs(D[0][1]); for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) if (Math.abs(D[i][j]) > maxVal) { maxVal = Math.abs(D[i][j]); p = i; q = j; } if (maxVal < EPSILON) break; const d_pq = D[p][q], d_pp = D[p][p], d_qq = D[q][q]; const tau = (d_qq - d_pp) / (2 * d_pq); const t = Math.sign(tau) / (Math.abs(tau) + Math.sqrt(1 + tau * tau)); const c = 1 / Math.sqrt(1 + t * t); const s = t * c; const Dp_orig = [...D[p]], Dq_orig = [...D[q]]; D[p][p] = d_pp - t * d_pq; D[q][q] = d_qq + t * d_pq; D[p][q] = D[q][p] = 0; for (let k = 0; k < n; k++) { if (k !== p && k !== q) { D[k][p] = D[p][k] = c * Dp_orig[k] - s * Dq_orig[k]; D[k][q] = D[q][k] = s * Dp_orig[k] + c * Dq_orig[k]; } } for (let k = 0; k < n; k++) { const V_kp = V[k][p], V_kq = V[k][q]; V[k][p] = c * V_kp - s * V_kq; V[k][q] = s * V_kp + c * V_kq; } } return { eigenvalues: D.map((r, i) => r[i]), eigenvectors: V }; }
+            function jacobiEig(A) { const n = A.length; let D = A.map(r => [...r]); let V = Array(n).fill(0).map((_, i) => Array(n).fill(0).map((_, j) => (i === j ? 1 : 0))); if (n <= 1) return { eigenvalues: n === 1 ? [D[0][0]] : [], eigenvectors: V }; for (let iter = 0; iter < 100; iter++) { let p = 0, q = 1, maxVal = Math.abs(D[0][1] || 0); for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) if (Math.abs(D[i][j]) > maxVal) { maxVal = Math.abs(D[i][j]); p = i; q = j; } if (maxVal < EPSILON) break; const d_pq = D[p][q], d_pp = D[p][p], d_qq = D[q][q]; const tau = (d_qq - d_pp) / (2 * d_pq); const t = Math.sign(tau || 1) / (Math.abs(tau) + Math.sqrt(1 + tau * tau)); const c = 1 / Math.sqrt(1 + t * t); const s = t * c; const Dp_orig = [...D[p]], Dq_orig = [...D[q]]; D[p][p] = d_pp - t * d_pq; D[q][q] = d_qq + t * d_pq; D[p][q] = D[q][p] = 0; for (let k = 0; k < n; k++) { if (k !== p && k !== q) { D[k][p] = D[p][k] = c * Dp_orig[k] - s * Dq_orig[k]; D[k][q] = D[q][k] = s * Dp_orig[k] + c * Dq_orig[k]; } } for (let k = 0; k < n; k++) { const V_kp = V[k][p], V_kq = V[k][q]; V[k][p] = c * V_kp - s * V_kq; V[k][q] = s * V_kp + c * V_kq; } } return { eigenvalues: D.map((r, i) => r[i]), eigenvectors: V }; }
             function completeOrthonormalBasis(vectors, dim) { const basis = vectors.map(v => [...v]); for (let i = 0; i < dim && basis.length < dim; i++) { let e = Array(dim).fill(0); e[i] = 1; let v = e; for (const b of basis) v = subtractVectors(v, scalarMultiply(dot(e, b), b)); if (norm(v) > EPSILON) basis.push(normalize(v)); } return basis; }
 
             // --- MAIN CALCULATION FUNCTIONS ---
-            function jacobiMethod(A, b, maxIter = 100, tolerance = 1e-10) {
+            function jacobiMethod(A, b, maxIter = 100, tolerance = 1e-7) {
                   const n = A.length;
                   for (let i = 0; i < n; i++) { if (Math.abs(A[i][i]) < EPSILON) return { converged: false, message: `Нульовий діагональний елемент A[${i + 1},${i + 1}]. Метод не може бути застосований.` }; }
                   const dominance = isDiagonallyDominant(A);
                   let x = Array(n).fill(0);
+                  const iterationHistory = []; // Array to store history
+                  iterationHistory.push([...x]); // Store initial guess (x_0)
                   for (let iter = 0; iter < maxIter; iter++) {
                         const x_new = Array(n).fill(0);
                         for (let i = 0; i < n; i++) {
@@ -220,11 +222,14 @@
                               for (let j = 0; j < n; j++) { if (i !== j) sum += A[i][j] * x[j]; }
                               x_new[i] = (b[i] - sum) / A[i][i];
                         }
+                        iterationHistory.push([...x_new]); // Store result of current iteration
                         const error = norm(subtractVectors(x_new, x));
-                        if (error < tolerance) { return { converged: true, solution: x_new, iterations: iter + 1, isDominant: dominance, residual: subtractVectors(b, multiplyMatrixVector(A, x_new)) }; }
+                        if (error < tolerance) {
+                              return { converged: true, solution: x_new, iterations: iter + 1, isDominant: dominance, residual: subtractVectors(b, multiplyMatrixVector(A, x_new)), iterationHistory: iterationHistory };
+                        }
                         x = x_new;
                   }
-                  return { converged: false, message: `Метод не зійшовся за ${maxIter} ітерацій.`, isDominant: dominance };
+                  return { converged: false, message: `Метод не зійшовся за ${maxIter} ітерацій.`, isDominant: dominance, iterationHistory: iterationHistory };
             }
             function calculateSVD(A) { const m = A.length, n = A[0].length; const At = transpose(A); const AtA = multiply(At, A); const { eigenvalues, eigenvectors: V_unordered } = jacobiEig(AtA); const eigPairs = eigenvalues.map((v, i) => ({ val: v, vec: V_unordered.map(r => r[i]) })).sort((a, b) => b.val - a.val); const singularValues = eigPairs.map(p => Math.sqrt(Math.max(0, p.val))); const V = transpose(eigPairs.map(p => p.vec)); let U_cols = []; for (let i = 0; i < n; i++) { if (singularValues[i] > EPSILON) { const u_col = multiplyMatrixVector(A, V.map(r => r[i])); U_cols.push(normalize(u_col)); } } if (m > U_cols.length) { U_cols = completeOrthonormalBasis(U_cols, m); } const U = transpose(U_cols); const Sigma = Array(m).fill(0).map(() => Array(n).fill(0)); singularValues.forEach((s, i) => { if (i < m && i < n) Sigma[i][i] = s; }); return { U, Sigma, V, singularValues }; }
             function getInverseMatrix(A) { const n = A.length; if (n !== A[0].length) throw new Error("M is not square."); const aug = A.map((r, i) => [...r, ...Array(n).fill(0).map((_, j) => (i === j ? 1 : 0))]); for (let i = 0; i < n; i++) { let max = i; for (let k = i + 1; k < n; k++) if (Math.abs(aug[k][i]) > Math.abs(aug[max][i])) max = k;[aug[i], aug[max]] = [aug[max], aug[i]]; if (Math.abs(aug[i][i]) < EPSILON) throw new Error("M is singular."); const p = aug[i][i]; for (let j = i; j < 2 * n; j++) aug[i][j] /= p; for (let k = 0; k < n; k++) if (k !== i) { const f = aug[k][i]; for (let j = i; j < 2 * n; j++) aug[k][j] -= f * aug[i][j]; } } return aug.map(r => r.slice(n)); }
@@ -264,13 +269,39 @@
             }
 
             // --- DISPLAY FUNCTIONS ---
-            function formatMatrix(m, name) { return `${name}:\n` + m.map(r => `| ${r.map(v => v.toFixed(4).padStart(10, ' ')).join(' ')} |`).join('\n'); }
-            function formatVector(v, name) { return `${name}:\n` + v.map(val => `| ${val.toFixed(4).padStart(10, ' ')} |`).join('\n'); }
-            function formatVectorExp(v, name) { return `${name}:\n` + v.map(val => `| ${val.toExponential(2).padStart(10, ' ')} |`).join('\n'); }
+            function formatMatrix(m, name) { return `${name}:\n` + m.map(r => `| ${r.map(v => v.toFixed(7).padStart(12, ' ')).join(' ')} |`).join('\n'); }
+            function formatVector(v, name) { return `${name}:\n` + v.map(val => `| ${val.toFixed(7).padStart(12, ' ')} |`).join('\n'); }
+            function formatVectorExp(v, name) { return `${name}:\n` + v.map(val => `| ${val.toExponential(2).padStart(12, ' ')} |`).join('\n'); }
             function displayResults(result) {
                   const resultsDiv = document.getElementById('results');
                   let output = "--- Результати Обчислень ---\n\n";
                   const h_line = "\n" + "-".repeat(60) + "\n\n";
+
+                  output += "Розв'язок СЛАР методом Якобі (Ax = b):\n";
+                  if (typeof result.jacobi === 'string') { output += result.jacobi + "\n"; }
+                  else if (result.jacobi) {
+                        if (result.jacobi.converged) {
+                              output += `Матриця ${result.jacobi.isDominant ? 'є' : 'НЕ є'} діагонально домінантною.\n`;
+                              output += `Метод зійшовся за ${result.jacobi.iterations} ітерацій.\n\n`;
+                              output += formatVector(result.jacobi.solution, "x (фінальний розв'язок)") + "\n\n";
+                              output += formatVectorExp(result.jacobi.residual, "Вектор нев'язки (b - Ax)") + "\n";
+                        } else {
+                              output += `Попередження: ${result.jacobi.isDominant ? 'Матриця є діагонально домінантною, але метод не зійшовся.' : 'Матриця не є діагонально домінантною (збіжність не гарантована).'}\n`;
+                              output += result.jacobi.message + "\n";
+                        }
+                        if (result.jacobi.iterationHistory) {
+                              output += "\n--- Ітерації Методу Якобі ---\n";
+                              let header = "Ітер. |";
+                              result.jacobi.iterationHistory[0].forEach((_, i) => header += `    x${i + 1}     |`);
+                              output += header + "\n" + "-".repeat(header.length) + "\n";
+                              result.jacobi.iterationHistory.forEach((x_k, k) => {
+                                    let row = `${k.toString().padStart(5, ' ')} |`;
+                                    x_k.forEach(val => row += `${val.toFixed(7).padStart(10, ' ')} |`);
+                                    output += row + "\n";
+                              });
+                        }
+                  }
+                  output += h_line;
 
                   output += "Повний Сингулярний розклад (A = UΣVᵀ):\n";
                   output += formatMatrix(result.svd.U, `U (${result.svd.U.length}x${result.svd.U[0].length})`) + "\n\n";
@@ -291,26 +322,11 @@
                   }
                   output += h_line;
 
-                  output += "Розв'язок СЛАР методом Якобі (Ax = b):\n";
-                  if (typeof result.jacobi === 'string') { output += result.jacobi + "\n"; }
-                  else if (result.jacobi) {
-                        if (result.jacobi.converged) {
-                              output += `Матриця ${result.jacobi.isDominant ? 'є' : 'НЕ є'} діагонально домінантною.\n`;
-                              output += `Метод зійшовся за ${result.jacobi.iterations} ітерацій.\n\n`;
-                              output += formatVector(result.jacobi.solution, "x (розв'язок)") + "\n\n";
-                              output += formatVectorExp(result.jacobi.residual, "Вектор нев'язки (b - Ax)") + "\n";
-                        } else {
-                              output += `Попередження: ${result.jacobi.isDominant ? 'Матриця є діагонально домінантною, але метод не зійшовся.' : 'Матриця не є діагонально домінантною (збіжність не гарантована).'}\n`;
-                              output += result.jacobi.message + "\n";
-                        }
-                  }
-                  output += h_line;
-
                   output += "Число обумовленості (κ):\n";
                   if (typeof result.conditionNumbers === 'string') output += result.conditionNumbers + "\n";
                   else {
-                        output += `1. За нормою 1:      κ₁(A) = ${result.conditionNumbers.cond1.toFixed(4)}\n`;
-                        output += `2. За нормою ∞:      κ_inf(A) = ${result.conditionNumbers.condInf.toFixed(4)}\n`;
+                        output += `1. За нормою 1:      κ₁(A) = ${(typeof result.conditionNumbers.cond1 === 'string') ? '∞' : result.conditionNumbers.cond1.toFixed(4)}\n`;
+                        output += `2. За нормою ∞:      κ_inf(A) = ${(typeof result.conditionNumbers.condInf === 'string') ? '∞' : result.conditionNumbers.condInf.toFixed(4)}\n`;
                         output += `3. За нормою 2:      κ₂(A) = ${(typeof result.conditionNumbers.cond2 === 'string') ? '∞' : result.conditionNumbers.cond2.toFixed(4)}\n`;
                   }
                   output += h_line;
